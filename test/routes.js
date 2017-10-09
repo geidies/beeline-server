@@ -68,6 +68,13 @@ lab.experiment("Route manipulation", function () {
     updatedRouteInfo.transportCompanyId = transportCompany.id
     transportCompany2 = await models.TransportCompany.create({})
 
+    // Drop all data in the db to have a fresh db with ALL 
+    // inserts in lab.before
+    await models.Route.destroy({
+      where: {},
+      truncate: true,
+      cascade: true,
+    })
 
     // Create stops
     const stopInstances = await Promise.all(
@@ -150,6 +157,13 @@ lab.experiment("Route manipulation", function () {
       '2017-01-01',
     ], {})
 
+    await populateRoute({
+      tags: ['lite'],
+      label: 'L3',
+    }, [
+      Date.now() + 1 * 24 * 60 * 60 * 1000,
+    ].map(ts => stringDate(new Date(ts))), {})
+
     /* This should be cacheable */
     await populateRoute({
       tags: ['public'],
@@ -176,7 +190,7 @@ lab.experiment("Route manipulation", function () {
       url: '/routes?includeDates=true'
     })
     expect(response.statusCode).equal(200)
-    expect(response.result.length).least(1)
+    expect(response.result.length).equal(6)
     for (let route of response.result) {
       expect(route.dates).instanceof(Object)
       if (route.dates.lastDate) {
@@ -189,7 +203,7 @@ lab.experiment("Route manipulation", function () {
       url: '/routes?includeTrips=true'
     })
     expect(response.statusCode).equal(200)
-    expect(response.result.length).least(1)
+    expect(response.result.length).equal(6)
     for (let route of response.result) {
       expect(route.trips).instanceof(Array)
       for (let trip of route.trips) {
@@ -200,29 +214,31 @@ lab.experiment("Route manipulation", function () {
       }
     }
 
+    const testStartDate = '2017-01-03'
     response = await server.inject({
       method: 'GET',
-      url: '/routes?includeTrips=true&startDate=2016-01-01'
+      url: '/routes?includeTrips=true&startDate=' + testStartDate
     })
     expect(response.statusCode).equal(200)
-    expect(response.result.length).above(1)
+    expect(response.result.length).equal(3)
     for (let route of response.result) {
       expect(route.trips).not.empty()
       for (let trip of route.trips) {
-        expect(new Date(trip.date).getTime()).least(new Date('2016-01-01').getTime())
+        expect(new Date(trip.date).getTime()).least(new Date(testStartDate).getTime())
       }
     }
 
+    const testEndDate = '2017-01-01'
     response = await server.inject({
       method: 'GET',
-      url: '/routes?includeTrips=true&endDate=2016-12-01'
+      url: '/routes?includeTrips=true&endDate=' + testEndDate
     })
     expect(response.statusCode).equal(200)
-    expect(response.result.length).above(1)
+    expect(response.result.length).equal(4)
     for (let route of response.result) {
       expect(route.trips).not.empty()
       for (let trip of route.trips) {
-        expect(new Date(trip.date).getTime()).most(new Date('2016-12-01').getTime())
+        expect(new Date(trip.date).getTime()).most(new Date(testEndDate).getTime())
       }
     }
 
@@ -231,7 +247,7 @@ lab.experiment("Route manipulation", function () {
       url: '/routes?tags=["public"]'
     })
     expect(response.statusCode).equal(200)
-    expect(response.result.length).least(1)
+    expect(response.result.length).equal(2)
     for (let route of response.result) {
       expect(route.tags.indexOf('public')).not.equal(-1)
     }
@@ -241,7 +257,7 @@ lab.experiment("Route manipulation", function () {
       url: '/routes?companyTags=["banana"]'
     })
     expect(response.statusCode).equal(200)
-    expect(response.result.length).least(1)
+    expect(response.result.length).equal(1)
     for (let route of response.result) {
       expect(route.companyTags.indexOf('banana')).not.equal(-1)
     }
@@ -251,7 +267,7 @@ lab.experiment("Route manipulation", function () {
       url: '/routes?includeTrips=true'
     })
     expect(response.statusCode).equal(200)
-    expect(response.result.length).least(1)
+    expect(response.result.length).equal(6)
     for (let route of response.result) {
       expect(route.trips).exist()
       for (let trip of route.trips) {
@@ -264,7 +280,7 @@ lab.experiment("Route manipulation", function () {
       url: '/routes?tags=["lite"]&label=L1'
     })
     expect(response.statusCode).equal(200)
-    expect(response.result.length).least(2)
+    expect(response.result.length).equal(2)
     for (let route of response.result) {
       expect(route.label).equal('L1')
       expect(route.tags.indexOf('lite')).not.equal(-1)
@@ -280,15 +296,16 @@ lab.experiment("Route manipulation", function () {
       })
     })
     Code.expect(response.statusCode).equal(200)
-    Code.expect(response.result.length).above(1)
+    Code.expect(response.result.length).equal(2)
     Code.expect(response.result.find(r => r.label === 'R2')).exist()
+    Code.expect(response.result.find(r => r.label === 'L3')).exist()
     for (let route of response.result) {
       Code.expect(route.trips).instanceof(Array)
       Code.expect(route._cached).true()
     }
 
     // Test tags, test label
-    await server.inject({
+    response = await server.inject({
       method: 'GET',
       url: '/routes?' + querystring.stringify({
         includeTrips: 'true',
@@ -298,14 +315,13 @@ lab.experiment("Route manipulation", function () {
       })
     })
     Code.expect(response.statusCode).equal(200)
-    Code.expect(response.result.length).least(1)
+    Code.expect(response.result.length).equal(1)
     Code.expect(response.result.find(r => r.label === 'R2')).exist()
     for (let route of response.result) {
       Code.expect(route.trips).instanceof(Array)
       Code.expect(route._cached).true()
     }
   })
-
 
   lab.test("Get route", {timeout: 10000}, async function () {
     const expect = Code.expect
@@ -460,7 +476,6 @@ lab.experiment("Route manipulation", function () {
       .then(cleanup, cleanup)
   })
 
-
   lab.test("Get route with indicative trip", async function () {
     var routeInstance = await models.Route.create(routeInfo)
     var now = new Date()
@@ -587,6 +602,7 @@ lab.experiment("Route manipulation", function () {
       routeInst.destroy()
     ])
   })
+
   lab.test("Get availability", async function () {
     var routeInst = await models.Route.create(routeInfo)
     var trips = testData.trips
@@ -1283,7 +1299,6 @@ lab.experiment("Route manipulation", function () {
       console.log(err.stack)
     }
   })
-
 
   lab.test("Search by Tags", async function () {
     // elements of testInstances will be destroyed at the end
