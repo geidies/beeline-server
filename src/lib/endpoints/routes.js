@@ -256,6 +256,12 @@ export function register (server, options, next) {
     }
   }
 
+  function paginateRoutes (routes, page, page_size) {
+    const DEFAULT_PAGE_SIZE = 10
+    page_size = page_size !== undefined ? page_size : DEFAULT_PAGE_SIZE
+    return page !== undefined ? routes.slice((page) * page_size, (page + 1) * page_size) : routes
+  }
+
   server.route({
     method: "GET",
     path: "/routes",
@@ -278,6 +284,8 @@ the \`startDate\` defaults to the time of request.
           tags: Joi.array().items(Joi.string()),
           companyTags: Joi.array().items(Joi.string()),
           label: Joi.string().optional(),
+          page: Joi.number().integer().min(0).optional(),
+          pageSize: Joi.number().integer().min(1).max(20).optional(),
         }
       }
     },
@@ -295,9 +303,9 @@ the \`startDate\` defaults to the time of request.
           request.query.startDate.getDate() === now.getDate() &&
           !request.query.includeIndicative
         ) {
-          reply(cachedFetchRoutes(request).then(routes => filterCached(routes, request)))
+          reply(cachedFetchRoutes(request).then(routes => paginateRoutes(filterCached(routes, request), request.query.page, request.query.pageSize)))
         } else {
-          reply(uncachedFetchRoutes(request))
+          reply(uncachedFetchRoutes(request).then(routes => paginateRoutes(routes, request.query.page, request.query.pageSize)))
         }
       } catch (err) {
         defaultErrorHandler(reply)(err)

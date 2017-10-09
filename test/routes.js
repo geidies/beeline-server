@@ -323,6 +323,69 @@ lab.experiment("Route manipulation", function () {
     }
   })
 
+  lab.test("List routes (paginated)", {timeout: 15000}, async function () {
+    // Page 0 without pageSize
+    // Default pageSize > number of routes so should return half full array
+    var response = await server.inject({
+      method: 'GET',
+      url: '/routes?' + querystring.stringify({
+        page: 0
+      })
+    })
+    Code.expect(response.statusCode).equal(200)
+    Code.expect(response.result.length).equal(6)
+
+    // Page 1 without pageSize
+    // Exceed number of routes, so should return empty array
+    response = await server.inject({
+      method: 'GET',
+      url: '/routes?' + querystring.stringify({
+        page: 1
+      })
+    })
+    Code.expect(response.statusCode).equal(200)
+    Code.expect(response.result.length).equal(0)
+
+    // Page 0 with pageSize
+    // pageSize < total routes so should return full page
+    response = await server.inject({
+      method: 'GET',
+      url: '/routes?' + querystring.stringify({
+        page: 0,
+        pageSize: 2
+      })
+    })
+    Code.expect(response.statusCode).equal(200)
+    Code.expect(response.result.length).equal(2)
+
+    // Invalid pageSize
+    response = await server.inject({
+      method: 'GET',
+      url: '/routes?' + querystring.stringify({
+        pageSize: 0
+      })
+    })
+    Code.expect(response.statusCode).equal(400)
+
+    // Invalid pageSize
+    response = await server.inject({
+      method: 'GET',
+      url: '/routes?' + querystring.stringify({
+        pageSize: 21
+      })
+    })
+    Code.expect(response.statusCode).equal(400)
+
+    // Invalid page
+    response = await server.inject({
+      method: 'GET',
+      url: '/routes?' + querystring.stringify({
+        page: -1
+      })
+    })
+    Code.expect(response.statusCode).equal(400)
+  })
+
   lab.test("Get route", {timeout: 10000}, async function () {
     const expect = Code.expect
 
